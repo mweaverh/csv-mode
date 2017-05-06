@@ -133,35 +133,44 @@ Set by customizing `csv-separators' -- do not set directly!")
   "Font lock keywords to highlight the field separators in CSV mode.
 Set by customizing `csv-separators' -- do not set directly!")
 
+(defun set-csv-separators (chars-as-string)
+  (interactive "s")
+  (let ((separator-list (butlast (cdr (split-string chars-as-string ""))) ))
+  (mapc (lambda (x)
+          (if (/= (length x) 1)
+              (error "Non-single-char string %S" x))
+          (if (and (boundp 'csv-field-quotes)
+                   (member x csv-field-quotes))
+              (error "%S is already a quote" x)))
+        separator-list)
+  (setq csv-separators separator-list
+        csv-separator-chars (mapcar 'string-to-char separator-list)
+        csv--skip-regexp (apply 'concat "^\n" csv-separators)
+        csv-separator-regexp (apply 'concat `("[" ,@separator-list "]"))
+        csv-font-lock-keywords
+        ;; NB: csv-separator-face variable evaluates to itself.
+        `((,csv-separator-regexp (0 'csv-separator-face)))
+        )))
+
 (defcustom csv-separators '("," "\t")
   "Field separators: a list of *single-character* strings.
 For example: (\",\"), the default, or (\",\" \";\" \":\").
 Neighbouring fields may be separated by any one of these characters.
 The first is used when inserting a field separator into the buffer.
-All must be different from the field quote characters, `csv-field-quotes'."
+All must be different from the field quote characters, `csv-field-quotes'.
+
+Must only be set via customization or by calling `set-csv-separators'."
   ;; Suggested by Eckhard Neber <neber@mwt.e-technik.uni-ulm.de>
   :type '(repeat string)
   ;; FIXME: Character would be better, but in Emacs 21.3 does not display
   ;; correctly in a customization buffer.
   :set (lambda (variable value)
-	 (mapc (lambda (x)
-		 (if (/= (length x) 1)
-		     (error "Non-single-char string %S" x))
-                 (if (and (boundp 'csv-field-quotes)
-                          (member x csv-field-quotes))
-                     (error "%S is already a quote" x)))
-	       value)
-	 (custom-set-default variable value)
-	 (setq csv-separator-chars (mapcar 'string-to-char value)
-	       csv--skip-regexp (apply 'concat "^\n" csv-separators)
-	       csv-separator-regexp (apply 'concat `("[" ,@value "]"))
-	       csv-font-lock-keywords
-	       ;; NB: csv-separator-face variable evaluates to itself.
-	       `((,csv-separator-regexp (0 'csv-separator-face))))))
+         (set-csv-separators (car value))
+         (custom-set-default variable value) ))
 
 (defcustom csv-field-quotes '("\"")
   "Field quotes: a list of *single-character* strings.
-For example: (\"\\\"\"), the default, or (\"\\\"\" \"\\='\" \"\\=`\").
+For example: (\"\\\"\"), the default, or (\"\\\"\" \"'\" \"`\").
 A field can be delimited by a pair of any of these characters.
 All must be different from the field separators, `csv-separators'."
   :type '(repeat string)
@@ -219,7 +228,7 @@ Changing this variable does not affect any existing CSV mode buffer."
 	 (set-default 'csv-comment-start value)))
 
 (defcustom csv-align-style 'left
-  "Aligned field style: one of `left', `centre', `right' or `auto'.
+  "Aligned field style: one of 'left, 'centre, 'right or 'auto.
 Alignment style used by `csv-align-fields'.
 Auto-alignment means left align text and right align numbers."
   :type '(choice (const left) (const centre)
@@ -447,8 +456,8 @@ Assumes point is at beginning of line."
 (defun csv-interactive-args (&optional type)
   "Get arg or field(s) and region interactively, offering sensible defaults.
 Signal an error if the buffer is read-only.
-If TYPE is noarg then return a list (beg end).
-Otherwise, return a list (arg beg end), where arg is:
+If TYPE is noarg then return a list `(beg end)'.
+Otherwise, return a list `(arg beg end)', where arg is:
   the raw prefix argument by default\;
   a single field index if TYPE is single\;
   a list of field indices or index ranges if TYPE is multiple.
@@ -1276,6 +1285,110 @@ Modifies the match data; use `save-match-data' if necessary."
     (or (and (not allowend) (eq start (length string)))
 	(push (substring string start) list))
     (nreverse list)))
+
+;;;; ChangeLog:
+
+;; 2016-04-21  Leo Liu  <sdl.web@gmail.com>
+;; 
+;; 	Fix csv-mode to delete its own overlays only
+;; 
+;; 	* csv-mode/csv-mode.el (csv--make-overlay, csv--delete-overlay): New
+;; 	 functions.
+;; 	 (csv-align-fields, csv-unalign-fields, csv-transpose): Use them.
+;; 
+;; 2016-03-04  Francis Wright  <f.j.wright@qmul.ac.uk>
+;; 
+;; 	* csv-mode/csv-mode.el: Remove out-of-date "URL:" header.
+;; 
+;; 2016-03-03  Stefan Monnier  <monnier@iro.umontreal.ca>
+;; 
+;; 	* csv-mode, landmark: Fix maintainer's email
+;; 
+;; 2015-07-09  Leo Liu  <sdl.web@gmail.com>
+;; 
+;; 	Fix column width calculation in cvs-mode.el
+;; 
+;; 	* csv-mode/cvs-mode.el (csv--column-widths, csv-align-fields): Fix
+;; 	 column width calculation.
+;; 
+;; 2015-05-24  Leo Liu  <sdl.web@gmail.com>
+;; 
+;; 	* csv-mode/cvs-mode.el (csv-set-comment-start): Handle nil.
+;; 
+;; 	See also http://debbugs.gnu.org/20564.
+;; 
+;; 2015-04-15  Stefan Monnier  <monnier@iro.umontreal.ca>
+;; 
+;; 	(csv-mode): Set mode-line-position rather than mode-line-format.
+;; 
+;; 	Fixes: debbugs:20343
+;; 
+;; 	* csv-mode/csv-mode.el (csv-mode-line-format): Only keep the CSV part of
+;; 	the mode line.
+;; 
+;; 2014-01-15  Stefan Monnier  <monnier@iro.umontreal.ca>
+;; 
+;; 	* csv-mode (csv-mode-line-help-echo): Remove.
+;; 
+;; 2013-04-24  Stefan Monnier  <monnier@iro.umontreal.ca>
+;; 
+;; 	* csv-mode.el (csv-kill-one-field): Check for presence before deleting
+;; 	trailing separator.  Remove last arg and turn into a function.
+;; 	(csv-kill-one-column, csv-kill-many-columns): Adjust callers.
+;; 
+;; 2012-10-22  Stefan Monnier  <monnier@iro.umontreal.ca>
+;; 
+;; 	* packages/csv-mode/csv-mode.el (csv-end-of-field): Don't skip TABs.
+;; 	(csv--skip-regexp): Rename from csv-skip-regexp.
+;; 
+;; 2012-10-10  Stefan Monnier  <monnier@iro.umontreal.ca>
+;; 
+;; 	* csv-mode.el: Bump version number.
+;; 
+;; 2012-10-10  Stefan Monnier  <monnier@iro.umontreal.ca>
+;; 
+;; 	* csv-mode.el: Use lexical-binding.  Remove redundant :group args.
+;; 	(csv-separators): Add TAB to the default.
+;; 	(csv-invisibility-default): Change default to t.
+;; 	(csv-separator-face): Inherit from escape-glyph.  Remove variable.
+;; 	(csv-mode-line-format): Remove trailing "--".  Move next to line-number.
+;; 	(csv-interactive-args): Use use-region-p.
+;; 	(csv--column-widths): New function, extracted from csv-align-fields.
+;; 	(csv-align-fields): Use it.  Use whole buffer by default. Use :align-to
+;; 	and text-properties when possible.
+;; 	(csv-unalign-fields): Also remove properties.
+;; 	(csv-mode): Truncate lines.
+;; 
+;; 2012-03-24  Chong Yidong  <cyd@gnu.org>
+;; 
+;; 	Commentary fix for quarter-plane.el.
+;; 
+;; 2012-03-24  Chong Yidong  <cyd@gnu.org>
+;; 
+;; 	Commentary tweaks for csv-mode, ioccur, and nhexl-mode packages.
+;; 
+;; 2012-03-24  Chong Yidong  <cyd@gnu.org>
+;; 
+;; 	csv-mode.el: Improve commentary.
+;; 
+;; 2012-03-12  Stefan Monnier  <monnier@iro.umontreal.ca>
+;; 
+;; 	* packages/csv-mode/csv-mode.el: Minor installation cleanups. Fix up
+;; 	copyright notice.  Set version.
+;; 	(csv-separators, csv-field-quotes): Fix calls to `error'.
+;; 	(csv-mode-line-help-echo, csv-mode-line-format): Replace
+;; 	mode-line-format for default-mode-line-format.
+;; 	(csv-mode-map): Declare and initialize.
+;; 	(csv-mode): Add autoload cookie.
+;; 	(csv-set-comment-start): Make sure vars are made buffer-local.
+;; 	(csv-field-index-mode, csv-field-index): Use derived-mode-p.
+;; 	(csv-align-fields): Improve insertion types of overlay's markers.
+;; 
+;; 2012-03-12  Stefan Monnier  <monnier@iro.umontreal.ca>
+;; 
+;; 	Add csv-mode.el.
+;; 
+
 
 (provide 'csv-mode)
 
